@@ -8,6 +8,10 @@ err_syntax_len = . - err_syntax
 kw_out: .asciz "out"
 kw_var: .asciz "var"
 kw_run: .asciz "run"
+kw_hw: .asciz "hw"
+kw_cpu: .asciz "cpu"
+cpu_prefix: .ascii "CPU vendor: "
+cpu_prefix_len = . - cpu_prefix
 newline: .byte 10
 
 .section .bss
@@ -16,15 +20,19 @@ source: .skip 65536
 vars: .skip 64*40
 namebuf: .skip 64
 num_buf: .skip 32
+decl_namebuf: .skip 64
+cpu_vendor: .skip 12
 src_len: .quad 0
 line_ptr: .quad 0
 line_start: .quad 0
 line_end: .quad 0
 cur: .quad 0
 name_len: .quad 0
+decl_name_len: .quad 0
 var_ptr: .quad 0
 val: .quad 0
 op_kind: .quad 0
+expr_op: .quad 0
 
 .section .text
 .global _start
@@ -95,7 +103,38 @@ _start:
     call has_word
     testq %rax, %rax
     jnz .next_line               # run is optional metadata for now
+    movq cur(%rip), %rdi
+    leaq kw_hw(%rip), %rsi
+    call has_word
+    testq %rax, %rax
+    jnz .do_hw
     jmp .do_assign
+
+.do_hw:
+    addq $2, cur(%rip)
+    call skip_space
+    movq cur(%rip), %rdi
+    leaq kw_cpu(%rip), %rsi
+    call has_word
+    testq %rax, %rax
+    jz .syntax_error
+    xorq %rax, %rax
+    cpuid
+    movl %ebx, cpu_vendor(%rip)
+    movl %edx, cpu_vendor+4(%rip)
+    movl %ecx, cpu_vendor+8(%rip)
+    movq $1, %rax
+    movq $1, %rdi
+    leaq cpu_prefix(%rip), %rsi
+    movq $cpu_prefix_len, %rdx
+    syscall
+    movq $1, %rax
+    movq $1, %rdi
+    leaq cpu_vendor(%rip), %rsi
+    movq $12, %rdx
+    syscall
+    call emit_nl
+    jmp .next_line
 
 .do_out:
     addq $3, cur(%rip)
@@ -123,11 +162,8 @@ _start:
     call emit_nl
     jmp .next_line
 .out_variable:
-    call read_name
-    call find_var
-    testq %rax, %rax
-    jz .syntax_error
-    movq 32(%rax), %rdi
+    call parse_expr
+    movq %rax, %rdi
     call print_integer
     jmp .next_line
 
@@ -137,6 +173,11 @@ _start:
     call read_name
     cmpq $0, name_len(%rip)
     je .syntax_error
+    leaq namebuf(%rip), %rsi
+    leaq decl_namebuf(%rip), %rdi
+    movq name_len(%rip), %rcx
+    movq %rcx, decl_name_len(%rip)
+    rep movsb
     # Optional type annotation, e.g. :num
     call skip_space
     movq cur(%rip), %rsi
@@ -158,8 +199,14 @@ _start:
     jne .syntax_error
     incq %rsi
     movq %rsi, cur(%rip)
-    call parse_integer
+    call parse_expr
     movq %rax, val(%rip)
+    leaq decl_namebuf(%rip), %rsi
+    leaq namebuf(%rip), %rdi
+    movq decl_name_len(%rip), %rcx
+    movq %rcx, name_len(%rip)
+    rep movsb
+    movb $0, (%rdi)
     call find_var
     testq %rax, %rax
     jnz .var_store
@@ -215,7 +262,7 @@ _start:
     incq %rsi
 .assign_parse:
     movq %rsi, cur(%rip)
-    call parse_integer
+    call parse_expr
     movq %rax, val(%rip)
     movq var_ptr(%rip), %rdi
     movq 32(%rdi), %rax
@@ -377,6 +424,129 @@ new_var:
     rep movsb
     movb $0, (%rdi)
     movq %r8, %rax
+    ret
+
+# expression grammar: expr := term (('+'|'-') term)*
+parse_expr:
+    call parse_term
+.pe_loop:
+    pushq %rax
+    call skip_space
+    movq cur(%rip), %rsi
+    cmpq line_end(%rip), %rsi
+    jae .pe_done
+    cmpb $43, (%rsi)
+    je .pe_plus
+    cmpb $45, (%rsi)
+    je .pe_minus
+.pe_done:
+    popq %rax
+    ret
+.pe_plus:
+    movq $1, expr_op(%rip)
+    incq %rsi
+    movq %rsi, cur(%rip)
+    call parse_term
+    movq %rax, %rdx
+    popq %rax
+    addq %rdx, %rax
+    jmp .pe_loop
+.pe_minus:
+    movq $2, expr_op(%rip)
+    incq %rsi
+    movq %rsi, cur(%rip)
+    call parse_term
+    movq %rax, %rdx
+    popq %rax
+    subq %rdx, %rax
+    jmp .pe_loop
+
+# term := primary (('*'|'/'|'%') primary)*
+parse_term:
+    call parse_primary
+.pt_loop:
+    pushq %rax
+    call skip_space
+    movq cur(%rip), %rsi
+    cmpq line_end(%rip), %rsi
+    jae .pt_done
+    cmpb $42, (%rsi)
+    je .pt_times
+    cmpb $47, (%rsi)
+    je .pt_div
+    cmpb $37, (%rsi)
+    je .pt_mod
+.pt_done:
+    popq %rax
+    ret
+.pt_times:
+    movq $3, expr_op(%rip)
+    incq %rsi
+    movq %rsi, cur(%rip)
+    call parse_primary
+    movq %rax, %rdx
+    popq %rax
+    imulq %rdx, %rax
+    jmp .pt_loop
+.pt_div:
+    movq $4, expr_op(%rip)
+    incq %rsi
+    movq %rsi, cur(%rip)
+    call parse_primary
+    movq %rax, %r11
+    popq %rax
+    testq %r11, %r11
+    jz .syntax_error
+    cqo
+    idivq %r11
+    jmp .pt_loop
+.pt_mod:
+    movq $5, expr_op(%rip)
+    incq %rsi
+    movq %rsi, cur(%rip)
+    call parse_primary
+    movq %rax, %r11
+    popq %rax
+    testq %r11, %r11
+    jz .syntax_error
+    cqo
+    idivq %r11
+    movq %rdx, %rax
+    jmp .pt_loop
+
+# primary := signed_integer | variable; identifiers resolve in global table
+parse_primary:
+    call skip_space
+    movq cur(%rip), %rsi
+    cmpq line_end(%rip), %rsi
+    jae .syntax_error
+    movb (%rsi), %al
+    cmpb $95, %al
+    je .pp_identifier
+    cmpb $65, %al
+    jb .pp_lower
+    cmpb $90, %al
+    jbe .pp_identifier
+.pp_lower:
+    cmpb $97, %al
+    jb .pp_number
+    cmpb $122, %al
+    jbe .pp_identifier
+.pp_number:
+    cmpb $45, %al
+    je .pp_integer
+    cmpb $48, %al
+    jb .syntax_error
+    cmpb $57, %al
+    ja .syntax_error
+.pp_integer:
+    jmp parse_integer
+.pp_identifier:
+    call read_name
+    call find_var
+    testq %rax, %rax
+    jz .syntax_error
+    movq 32(%rax), %rax
     ret
 
 # parse signed decimal integer at cur, return rax

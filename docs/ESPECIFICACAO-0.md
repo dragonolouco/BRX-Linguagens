@@ -1,45 +1,58 @@
-# BRX 0 — especificação inicial da linguagem
+# BRX 0 — gramática e semântica da linguagem
 
-## Identidade e limite
+## Execução e base atual
 
-BRX é a linguagem de programação que estamos definindo. Esta especificação descreve o significado dos arquivos `.brx`; não é o próprio mecanismo que os executa. Para provar a sintaxe sem usar C ou runtime de bibliotecas, o primeiro executor (`brx0`) está escrito manualmente em assembly x86-64 e usa chamadas de sistema Linux. O bootstrap precisa de GNU `as` e `ld` para ser montado e ligado. Isso evita C e libc nesta versão, mas não elimina a cadeia de ferramentas inicial.
+BRX é a linguagem cujas regras definimos neste projeto. O executor `brx0` é a implementação inicial dessas regras em assembly x86-64, sem C, runtime C, libc ou bibliotecas de terceiros. Ele usa syscalls Linux para ler o arquivo e escrever a saída, e uma instrução CPUID nativa para ler o identificador de fabricante da CPU.
 
-## Modelo do programa
+Esta versão é executada no Linux x86-64. Para criar o ELF inicial, são necessários GNU `as` e `ld`. Isso significa **sem bibliotecas externas**, mas não “sem ferramenta nenhuma”: CPU, ISA, formato ELF, kernel e assembler/linker já existem.
 
-Um arquivo BRX 0 é uma sequência de comandos, um por linha. Espaços e tabulações antes do comando são ignorados. `#` inicia comentário até o fim da linha. A primeira versão é deliberadamente de inteiros com sinal de 64 bits e texto literal entre aspas duplas.
+## Forma de um programa
+
+O arquivo BRX é processado linha a linha. Cada comando ocupa uma linha. São ignorados espaços/tabs antes e depois de um comando; `#` inicia um comentário de linha.
 
 ```brx
-run "meu_programa"       # rótulo opcional, sem efeito na execução
-var pontos:num = 12      # declara ou redefine uma variável
-out "pontos:"            # escreve texto seguido de nova linha
-out pontos                # escreve o valor numérico
-pontos += 3
-pontos -= 1
-pontos *= 2
-pontos /= 2
-pontos = -9
+run "calculo"
+hw cpu
+var base:num = 10
+var ajuste:num = 3 * 4
+var total:num = base + ajuste
+total = total * 2 - 4
+out "total:"
+out total
 ```
 
-## Regras semânticas implementadas
+## Gramática do subconjunto executável
 
-- Variáveis são identificadores ASCII (letras, dígitos e `_`), com nome de até 63 bytes. Há espaço para 64 nomes por programa.
-- `var nome:num = inteiro` armazena inteiro assinado de 64 bits. A anotação `:num` pode ser omitida.
-- `nome = inteiro` substitui o valor; `+=`, `-=`, `*=` e `/=` atualizam o valor existente. Divisão é inteira e truncada em direção a zero.
-- `out "texto"` escreve os bytes do literal até a aspa de fechamento; escapes ainda não existem. `out nome` escreve o valor numérico.
-- `run "rótulo"` é metadado ignorado pelo executor inicial.
-- Linhas iniciadas por `#` e linhas vazias são ignoradas.
-- Arquivo de entrada: até 65.535 bytes; runtime: Linux x86-64.
+```text
+programa       := linha*
+linha          := comentario | comando | vazia
+comando        := run_string | hw_cpu | declaracao | atribuicao | saida_texto | saida_expr
+run_string     := "run" STRING
+hw_cpu         := "hw" "cpu"
+declaracao     := "var" IDENT [":num"] "=" expressao
+atribuicao     := IDENT ("=" | "+=" | "-=" | "*=" | "/=") expressao
+saida_texto    := "out" STRING
+saida_expr     := "out" expressao
+expressao      := termo (("+" | "-") termo)*
+termo          := primaria (("*" | "/" | "%") primaria)*
+primaria       := inteiro_com_sinal | IDENT
+```
 
-## Ainda não implementado
+Multiplicação, divisão e resto têm precedência maior que soma e subtração; operadores da mesma precedência são avaliados da esquerda para a direita. Parênteses, comparações e operadores lógicos ainda não fazem parte da gramática implementada.
 
-Expressões gerais (como `a + b` à direita de uma atribuição), números decimais, strings como valores de variáveis, booleanos, condicionais, laços, funções, listas, escopos, entrada do usuário, diagnóstico com número de linha, outras arquiteturas e sistema operacional. Esses recursos serão incorporados por etapas, depois de testes de cada fase.
+## Regras atuais
 
-## Roteiro técnico
+- Valores são inteiros assinados de 64 bits; aritmética é realizada em registradores de 64 bits. `/` e `/=` fazem divisão inteira truncada em direção a zero. `%` calcula o resto. Divisão/remainder por zero encerra com erro.
+- Identificadores aceitam ASCII (letras, dígitos e `_`), até 63 bytes; no máximo 64 variáveis globais.
+- `var x:num = expressão` declara ou redefine `x`. `:num` é atualmente opcional e descritivo, pois a versão só tem valores numéricos.
+- `x = expressão` substitui o valor; `+=`, `-=`, `*=` e `/=` combinam o valor atual com a expressão à direita.
+- `out expressão` imprime o inteiro seguido por nova linha. `out "texto"` imprime bytes do literal sem as aspas, sem escapes, seguido por nova linha.
+- `hw cpu` executa CPUID leaf 0 e imprime o texto de fabricante retornado em EBX, EDX, ECX. A CPU observada no sandbox pode ser virtualizada e não refletir a máquina física do usuário.
+- `run "rótulo"` é metadado atualmente ignorado.
+- Arquivo de entrada: até 65.535 bytes; identificadores e tabela de variáveis têm limites fixos nesta etapa.
 
-1. Estabilizar leitor de arquivo, declarações, atribuições numéricas e saída via syscall.
-2. Criar tokenizador e parser de expressões com precedência.
-3. Criar representação de instruções/AST e condições/loops/funções.
-4. Escrever o compilador do BRX em BRX quando a linguagem puder representar buffers, laços, funções e emissão de bytes.
-5. Compilar o compilador BRX com o bootstrap anterior; comparar saídas e manter testes de reprodução (bootstrap/auto-hospedagem).
+## Próximas partes da linguagem
 
-A etapa 4 não apaga retroativamente o bootstrap: cada compilador auto-hospedado depende de uma versão anterior confiável que o compilou.
+Ainda não estão implementados: literais de texto armazenados em variáveis, booleanos, condicionais, laços, funções, listas, escopos locais, entrada do usuário, decimais, escape de strings, tratamento de overflow, mensagens de erro com linha/coluna, backends além de Linux x86-64 e consultas específicas de GPU.
+
+O próximo avanço do núcleo é adicionar comparação/booleanos e blocos (`if`/`end`), depois loops e funções com call stack. A linguagem deve ganhar a capacidade de manipular buffers e emitir bytes antes de iniciarmos um compilador escrito em BRX. Auto-hospedagem é uma meta posterior, construída sobre e testada contra um bootstrap anterior; ela não remove a dependência histórica do primeiro bootstrap.

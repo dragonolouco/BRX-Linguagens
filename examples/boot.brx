@@ -1,10 +1,9 @@
 run "primeiro_teste"
 # variaveis e algoritmo aritmetico simples
-var valor:num = 10
-out "valor inicial"
-out valor
-valor += 5
-valor *= 2
-valor -= 4
+hw cpu
+var base:num = 10
+var ajuste:num = 3 * 4
+var resultado:num = base + ajuste
+resultado = resultado * 2 - 4
 out "resultado"
-out valor
+out resultado
