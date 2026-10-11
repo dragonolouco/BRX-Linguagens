@@ -1,42 +1,44 @@
-# BRX
+# BRX — linguagem experimental
 
-BRX é uma linguagem experimental em português, criada neste repositório. A primeira versão é um interpretador pequeno escrito do zero em C: o lexer, o parser e a avaliação das expressões são próprios, sem frameworks, dependências de terceiros ou bibliotecas adicionais. O executável usa apenas a biblioteca padrão/runtime C do sistema. Um compilador C é necessário para construir o interpretador — uma linguagem nova precisa de uma implementação hospedeira até que exista um compilador próprio.
+BRX é uma linguagem que estamos projetando do zero: nós definimos sua gramática e o significado dos comandos. O primeiro executor não é escrito em C; é um bootstrap manual em **assembly x86-64**, que usa chamadas diretas ao kernel Linux. Não usa libc nem bibliotecas de terceiros.
 
-## Compilar
+Isso não significa independência absoluta de ferramentas: o bootstrap ainda requer GNU `as` e `ld` para transformar assembly em executável ELF e roda sobre Linux x86-64. Veja [o caminho até o hardware](docs/CAMINHO-ATE-O-HARDWARE.md) para entender o percurso.
 
-```sh
-cc -std=c11 -O2 brx.c -o brx
-```
-
-## Executar
+## Montar e executar
 
 ```sh
-./brx exemplos/ola.brx
+as --64 src/boot/brx0.s -o /tmp/brx0.o
+ld -o brx0 /tmp/brx0.o
+./brx0 examples/boot.brx
 ```
 
-## Exemplo
+Saída esperada:
+
+```text
+valor inicial
+10
+resultado
+26
+```
+
+## BRX 0
 
 ```brx
-// Comentários começam com duas barras
-let nome = "mundo";
-let resposta = 6 * 7;
-print("Olá, " + nome);
-print(resposta);
-
-if (resposta == 42) {
-  print(true);
-} else {
-  print(false);
-}
+run "meu_programa"
+var pontos:num = 12
+out "pontos:"
+out pontos
+pontos += 3
+pontos *= 2
+out pontos
 ```
 
-## Sintaxe nesta versão
+A primeira versão executável aceita inteiros assinados, declaração/atribuição de variáveis, operações compostas `+=`, `-=`, `*=`, `/=`, saída de números/textos literais, comentários `#` e linhas `run` opcionais. Um comando ocupa uma linha. Detalhes e limites estão na [especificação BRX 0](docs/ESPECIFICACAO-0.md).
 
-- Declaração imutável? **Não**: `let nome = expressão;` declara; `nome = expressão;` atualiza uma variável já declarada.
-- Tipos: número, texto, booleanos (`true`/`false`) e `null`.
-- Operadores: `+`, `-`, `*`, `/`, `%`, comparações, igualdade, `&&`, `||` e `!`.
-- Saída: `print(expressão);`.
-- Condicional: `if (condição) { ... } else { ... }`.
-- Comentários de linha: `// ...`.
+## Testes
 
-O escopo inicial é deliberadamente pequeno: não há funções, arrays, entrada interativa nem laços executáveis ainda (`while` está reservado, mas não implementado). Erros mostram a linha e interrompem a execução. Esta é uma base inicial para evoluir a gramática e a implementação.
+```sh
+tests/smoke.sh
+```
+
+O protótipo é intencionalmente pequeno. Expressões gerais, texto/booleanos como valores, `if`, laços, funções, listas, REPL, diagnósticos completos e outras arquiteturas ainda não estão implementados. Próxima etapa planejada: parser e expressões; depois controle de fluxo e funções; finalmente, um compilador escrito em BRX e o processo de auto-hospedagem.

@@ -1,0 +1,10 @@
+run "primeiro_teste"
+# variaveis e algoritmo aritmetico simples
+var valor:num = 10
+out "valor inicial"
+out valor
+valor += 5
+valor *= 2
+valor -= 4
+out "resultado"
+out valor
