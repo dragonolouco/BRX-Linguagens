@@ -7,7 +7,9 @@ BRX é uma linguagem própria em desenvolvimento. Seu bootstrap inicial `brx0` e
 - **Fonte `.brx`:** `brx0` lê e interpreta diretamente um subconjunto textual da linguagem.
 - **Executável virtual `.brxe`:** `brxvm0` lê um arquivo binário com cabeçalho BRXE e executa os opcodes da VM BRX.
 
-BRXE é o caminho para que um mesmo aplicativo rode sem recompilação em qualquer host que disponha de um runtime BRX compatível. O runtime/adaptador precisa ser portado e instalado em cada sistema; não estamos afirmando que já há suporte a qualquer OS, CPU ou GPU. O estado e os opcodes estão descritos na [especificação BRXE](docs/FORMATO-EXECUTAVEL-BRX.md).
+BRXE é o caminho para que um mesmo aplicativo rode sem recompilação em qualquer host que disponha de um runtime BRX compatível. O runtime/adaptador precisa ser portado e instalado em cada sistema; não estamos afirmando que já há suporte a qualquer OS, CPU ou GPU. Consulte a [especificação BRXE](docs/FORMATO-EXECUTAVEL-BRX.md), a [arquitetura e fallback de hardware](docs/ALVOS-E-BACKENDS.md) e o [relatório de pesquisa aprofundada](docs/PESQUISA-APROFUNDADA-BRXE.md).
+
+O requisito de hardware é que futuros runtimes detectem automaticamente as capacidades e escolham o melhor adapter disponível: específico/acelerado, genérico exposto pelo host, fallback básico/software ou erro legível. A Microsoft documenta um exemplo real: Basic Display Adapter funciona como driver genérico para recursos básicos quando o driver do fabricante não está disponível; os recursos/performance são menores [documentação](https://support.microsoft.com/en-us/windows/hardware/display-graphics/microsoft-basic-display-adapter-in-windows). Isso não representa um driver universal. A sondagem/HAL BRX ainda **não está implementada** em `brxvm0`.
 
 ## Construir e executar
 
@@ -23,14 +25,14 @@ ld -o brxvm0 /tmp/brxvm0.o
 ./brxvm0 examples/hello.brxe
 ```
 
-`examples/hello.brxe` é um módulo binário que executa duas constantes inteiras, soma-as, imprime o resultado e depois imprime uma constante de texto. Saída:
+`examples/hello.brxe` é um módulo binário que grava um valor num slot local, carrega-o, soma outro valor e imprime o resultado e uma constante de texto. Saída:
 
 ```text
 42
 BRX VM OK
 ```
 
-O runtime BRXE neste estágio executa `HALT`, `PUSH_I64`, aritmética inteira, `PRINT_I64` e `PRINT_CONST`. Ele valida a assinatura/versão/tamanhos do módulo e limita a pilha. **Ainda falta** o compilador `.brx`→`.brxe`, variáveis/controle de fluxo no bytecode e ports do runtime a outros sistemas e arquiteturas.
+O runtime BRXE aceita arquivos de até 131071 bytes e executa `HALT`, `PUSH_I64`, `LOAD_LOCAL`, `STORE_LOCAL`, aritmética inteira, `PRINT_I64` e `PRINT_CONST`. Antes de executar, verifica a estrutura linear de todas as instruções, limites de operandos, profundidade da pilha e inicialização de locais, evitando saída parcial para módulos malformados. **Ainda faltam** saltos, funções, compilador `.brx`→`.brxe`, sondagem/HAL e ports do runtime a outros sistemas e arquiteturas.
 
 ## Subconjunto fonte BRX
 
@@ -61,4 +63,4 @@ Executar todos os testes:
 tests/smoke.sh
 ```
 
-A suíte monta os dois executores e testa CPUID, expressões fonte, módulo BRXE, saída e rejeição de arquivo truncado, opcode desconhecido e underflow.
+A suíte monta os dois executores e testa CPUID, expressões fonte, módulo BRXE com local, saída e rejeição de arquivo truncado, opcode inválido tardio, underflow, local não inicializado e overflow de divisão.

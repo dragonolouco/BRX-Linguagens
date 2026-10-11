@@ -30,14 +30,14 @@ O interpretador `src/boot/brx0.s` em Linux x86-64 lê linha a linha, aceita até
 
 ## Execução BRXE implementada
 
-`src/vm/brxvm0.s` é um runtime x86-64/Linux escrito manualmente em assembly que valida módulo BRXE e interpreta um subconjunto de opcodes: `HALT`, `PUSH_I64`, `ADD_I64`, `SUB_I64`, `MUL_I64`, `DIV_I64`, `MOD_I64`, `PRINT_I64`, `PRINT_CONST`. O cabeçalho BRXE inclui magia `BRXE`, version=1, flags, code_size e data_size em little-endian. A pilha tem 256 slots. `examples/hello.brxe` imprime `42` e `BRX VM OK`.
+`src/vm/brxvm0.s` é um runtime x86-64/Linux escrito manualmente em assembly. Valida módulo BRXE antes de executar e suporta: `HALT`, `PUSH_I64`, `LOAD_LOCAL`, `STORE_LOCAL`, `ADD_I64`, `SUB_I64`, `MUL_I64`, `DIV_I64`, `MOD_I64`, `PRINT_I64`, `PRINT_CONST`. O cabeçalho BRXE inclui magia `BRXE`, version=1, flags, code_size e data_size little-endian. O loader lê em loop até EOF, repete `EINTR`, permite no máximo 131071 bytes e prova que não há byte extra; também exige correspondência exata entre arquivo e cabeçalho. Pilha e 256 slots locais têm limites fixos; a verificação linear checa largura de operandos, stack-depth, ranges de literais e leitura de local previamente inicializado. `examples/hello.brxe` grava/carrega um valor local e imprime `42` e `BRX VM OK`.
 
-A suíte `tests/smoke.sh` monta `brx0` e `brxvm0`, testa CPUID/expressões/saída e erros em módulos truncados, opcodes desconhecidos e underflow. Build via GNU `as` + `ld`; os binários testados são ELF sem `PT_INTERP`. Nenhum C, libc ou biblioteca de terceiros faz parte dos dois executores.
+A suíte `tests/smoke.sh` monta `brx0` e `brxvm0`, testa CPUID/expressões/saída, módulo truncado, arquivos no tamanho exato máximo e um byte acima, opcode desconhecido (inclusive opcode inválido após instruções que produziriam saída), underflow, local não inicializado e divisão com overflow. Build via GNU `as` + `ld`; os binários testados são ELF sem `PT_INTERP`. Nenhum C, libc ou biblioteca de terceiros faz parte dos dois executores.
 
 ## Não implementado
 
 - Compilador fonte `.brx` → `.brxe`.
-- Load/store de variáveis/locals no bytecode; saltos, funções e chamadas.
+- Saltos, fluxo de controle, funções e chamadas.
 - Inteiros com política final de overflow; diagnóstico de linha para VM; módulos/imports/capabilities.
 - Runtimes compatíveis por outros OS/ISAs.
 - `BRX-HAL`, CPU_INFO portável e GPU.
@@ -47,7 +47,7 @@ A suíte `tests/smoke.sh` monta `brx0` e `brxvm0`, testa CPUID/expressões/saíd
 
 1. Estabilizar parser/gramática textual e erros de fonte.
 2. Fixar versão formal do header/opcodes BRXE, traps, limites e resultado de overflows.
-3. Adicionar `LOAD_LOCAL`/`STORE_LOCAL`, branch/labels e fluxo de controle com testes binários bons e ruins.
+3. Adicionar branches/labels e ampliar o verificador para estados de pilha por bloco/aresta.
 4. Implementar emissor BRX→BRXE que compile expressões/saídas; comparar execução fonte vs VM.
 5. Portar runtime pequeno a outro OS/ISA; testar o mesmo `.brxe` sem recompilar.
 6. Criar imports versionados `BRX.IO`/`BRX.HAL` por capability, e adaptar drivers.

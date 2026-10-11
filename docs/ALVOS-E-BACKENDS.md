@@ -16,14 +16,27 @@ aplicação .brx -> compilador BRX -> módulo .brxe portátil
 
 O usuário não precisa escolher o sistema para definir a **linguagem** ou o formato virtual. A equipe escolhe quais hosts suportar ao portar e testar o runtime. Um módulo que pede recursos ausentes (por exemplo, gráfico 3D) pode exigir runtime/driver com essa capacidade.
 
+## Autodetecção e fallback automático
+
+O runtime deve detectar o host, dispositivos visíveis, drivers/APIs e capacidades anunciadas usando interfaces autorizadas do sistema. O app BRX solicita uma capacidade lógica — por exemplo, `GFX.surface` ou `AUDIO.play` — e não escolhe por conta própria um driver ou registrador de dispositivo. Para cada capacidade, o runtime seleciona automaticamente a implementação disponível com a melhor compatibilidade:
+
+1. backend específico com aceleração, se driver/API compatível estiver presente;
+2. backend genérico do sistema/dispositivo, se o host o expuser;
+3. implementação por software ou modo básico, se existir e atender ao mínimo pedido;
+4. erro legível de capacidade indisponível, sem travar o app, usar acesso não autorizado ou fingir sucesso.
+
+O módulo pode marcar capacidades como **obrigatórias** ou **opcionais**. O loader consulta todas as obrigatórias antes de iniciar; se uma faltar, explica qual é. Nas opcionais, a aplicação pode escolher uma experiência reduzida. Isso permite que a mesma aplicação se adapte sem conhecer marca/modelo/OS quando os adapters disponíveis oferecem o contrato pedido. Não instala drivers, não concede privilégios e não presume que um backend genérico entregue aceleração ou todos os recursos. “Qualquer hardware” significa tentar os caminhos que o host realmente expõe e degradar com segurança; dispositivo sem interface compatível continua sem suporte até haver adapter.
+
+Há um exemplo concreto dessa ideia no Windows: o Microsoft Basic Display Adapter é um driver genérico embutido que oferece recursos básicos quando o driver do fabricante está ausente; a Microsoft recomenda o driver específico para desempenho, resoluções, múltiplos monitores e recursos melhores [6]. O Basic Display Driver pode ser suficiente para imagem básica/linear framebuffer, mas não se torna por isso um driver universal [7].
+
 ## Camadas do projeto
 
 1. **Especificação BRX** — sintaxe, tipos, controle de fluxo e semântica independentes do alvo.
 2. **Front-end** — scanner, parser, análise semântica e IR comum.
 3. **Formato BRXE** — máquina virtual e binário portátil versionado; o mesmo arquivo é distribuído entre alvos.
 4. **Runtime BRX** — carrega/valida e executa/JIT o bytecode em cada host.
-5. **BRX-HAL (proposta)** — contrato de capacidades como console, arquivos, CPU info, memória, áudio e `BRX.GFX`; o app pede a capacidade e não o nome da syscall/driver.
-6. **Adaptador do host/driver** — o runtime converte as chamadas BRX-HAL para o sistema, ABI e drivers instalados.
+5. **BRX-HAL (proposta)** — contrato de capacidades como console, arquivos, CPU info, memória, áudio e `BRX.GFX`; o app pede a capacidade e não o nome da syscall/driver. A detecção e escolha de fallback ocorrem no runtime.
+6. **Adaptador do host/driver** — o runtime converte as chamadas BRX-HAL para o sistema, ABI e drivers instalados, usando preferência ordenada por capacidade.
 7. **Extensões específicas** — backend GPU/ISA por fabricante e geração quando operações gráficas comuns não bastarem.
 
 O conteúdo normativo de BRXE deve ficar separado de APIs do host. WebAssembly faz essa separação explícita: o core define ISA binária, validação e semântica; I/O e integração pertencem ao embedding e às APIs do ambiente [1]. A especificação da Java VM também separa bytecode/class-file de cada implementação de runtime [2].
@@ -40,7 +53,7 @@ Uma GPU tem ISA/command buffers por fabricante e geração; a ISA varia e não p
 
 ## O que já funciona e o que falta
 
-O bootstrap `brx0` interpreta texto BRX em Linux x86-64. `brxvm0` é um runtime BRXE inicial, também Linux x86-64; executa um subconjunto de opcodes indicado em [FORMATO-EXECUTAVEL-BRX.md](FORMATO-EXECUTAVEL-BRX.md). Ainda não há compilador de fonte BRX para BRXE, runtime para outro OS/ISA nem HAL/dispositivo gráfico implementado. A meta de portabilidade é arquitetura do projeto; a matriz de alvos só cresce com runtimes e testes reais.
+O bootstrap `brx0` interpreta texto BRX em Linux x86-64. `brxvm0` é um runtime BRXE inicial, também Linux x86-64; executa pilha numérica, aritmética, slots locais e saída, limita arquivo a 131071 bytes e faz verificador linear antes dos efeitos. O subconjunto está indicado em [FORMATO-EXECUTAVEL-BRX.md](FORMATO-EXECUTAVEL-BRX.md). Ainda não há compilador de fonte BRX para BRXE, sondagem/HAL de dispositivos, runtime para outro OS/ISA nem adapter gráfico implementado. A meta de portabilidade é arquitetura do projeto; a matriz de alvos só cresce com runtimes e testes reais.
 
 ## Critérios para anunciar um host compatível
 
@@ -57,3 +70,5 @@ O bootstrap `brx0` interpreta texto BRX em Linux x86-64. `brxvm0` é um runtime 
 [3] https://docs.kernel.org/gpu/drm-mm.html — Linux DRM memory management.
 [4] https://dri.freedesktop.org/docs/drm/gpu/driver-uapi.html — DRM driver UAPI.
 [5] https://gpuopen.com/amd-gpu-architecture-programming-documentation/ — AMD GPU ISA documentation.
+[6] https://support.microsoft.com/en-us/windows/hardware/display-graphics/microsoft-basic-display-adapter-in-windows — Microsoft Basic Display Adapter.
+[7] https://learn.microsoft.com/en-us/windows-hardware/drivers/display/microsoft-basic-display-driver — Microsoft Basic Display Driver.

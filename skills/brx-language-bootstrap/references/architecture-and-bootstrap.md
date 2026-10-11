@@ -19,6 +19,10 @@ Native backend por alvo pode ser opção, mas não deve ser confundido com o for
 
 Defina APIs importadas versionadas como `BRX.IO`, `BRX.HW.CPU_INFO`, `BRX.MEM` e `BRX.GFX`; declare capacidades/permissões. O adaptador BRX mapeia-as para o OS e driver instalados. Isso permite que o **app** não cite Linux/Windows, enquanto o runtime/hardware integration trata diferenças nativas.
 
+O runtime deve sondar automaticamente interfaces, drivers e capacidades anunciados pelo host e selecionar backend sem exigir que o app conheça modelo/OS. Ordem proposta por capacidade: adapter acelerado suportado → adapter genérico/class driver exposto pelo host → fallback básico/software presente → erro legível. O módulo deve separar capability obrigatória de opcional para que o loader falhe cedo ou o app degrade. Fallback só existe se houver implementação real; genérico não significa todos os recursos nem desempenho acelerado. A sondagem escolhe interfaces autorizadas e nunca instala drivers, eleva privilégios ou faz acesso físico bruto.
+
+Um exemplo oficial concreto é o Microsoft Basic Display Adapter: o Windows o usa para display/gráficos básicos quando o driver do fabricante está ausente, enquanto o driver específico pode oferecer mais desempenho, resolução e funções [11]. O Microsoft Basic Display Driver tem um propósito básico de framebuffer e pode ter limitações de modo/resolução [12]. Isso sustenta a arquitetura de fallback, não uma promessa de driver genérico universal para qualquer hardware.
+
 Em processo hospedado, RAM do app é normalmente memória virtual atribuída pelo OS. Driver instalado oferece interfaces autorizadas; não significa acesso bruto ao hardware nem contorna controles do OS. Linux syscalls entram no kernel; no x86-64 o número e argumentos seguem ABI documentada por syscall(2) [3].
 
 GPU tem arquitetura, memória, comandos e sincronização próprios. Linux DRM documenta buffers/mapeamentos/execução e driver UAPI [4][5]. É possível evitar bibliotecas de usuário tipo Mesa/OpenGL/Vulkan implementando seu próprio adaptador que fale com UAPI, mas kernel/driver continuam necessários. AMD publica ISA dividida por geração/família [6]; especificação ISA não é um driver completo.
@@ -47,3 +51,5 @@ CPU executa instruções da ISA nativa e não reconhece palavras de alto nível.
 [8] Go source installation — https://go.dev/doc/install/source
 [9] GCC build stages — https://gcc.gnu.org/install/build.html
 [10] Ken Thompson, “Reflections on Trusting Trust” — https://dl.acm.org/doi/10.1145/358198.358210
+[11] Microsoft Basic Display Adapter — https://support.microsoft.com/en-us/windows/hardware/display-graphics/microsoft-basic-display-adapter-in-windows
+[12] Microsoft Basic Display Driver — https://learn.microsoft.com/en-us/windows-hardware/drivers/display/microsoft-basic-display-driver

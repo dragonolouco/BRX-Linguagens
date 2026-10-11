@@ -23,6 +23,8 @@ O formato BRXE pretende ser o mesmo em todos os hosts compatíveis; `brxvm0` hoj
 
 A interface BRX-HAL pode deixar o **aplicativo** independente do sistema: o programa pede uma capacidade (`console.write`, `cpu.info`, `gpu.create_surface`, por exemplo) pelo contrato BRX, e o runtime/adapter escolhe a chamada correta para OS, ABI e driver já instalados. Assim, se existir runtime e driver compatíveis com as permissões necessárias, o mesmo `.brxe` pode funcionar sem o app saber qual sistema está por baixo.
 
+O comportamento automático pretendido é: sondar APIs/devices visíveis ao host → consultar capabilities e permissões → escolher backend específico acelerado → tentar um adapter genérico do OS, se existir → fallback básico/software, se cumprir o requisito → retornar erro legível se a capability obrigatória não existir. Recursos opcionais podem degradar; o app não seleciona marca/modelo. Isso não instala driver nem contorna permissões. A Microsoft documenta o Basic Display Adapter como fallback genérico com recursos gráficos básicos quando o driver do fabricante falta; o driver específico entrega recursos e desempenho melhores [7] [8]. Não há um driver único que automaticamente cubra todo tipo de hardware.
+
 No modo hosted normal, o runtime BRX e o aplicativo executam em memória virtual sob controle do OS. O runtime pede ao OS operações permitidas, e usa interfaces de driver para acessar dispositivos. O Linux, por exemplo, usa syscalls: na ABI Linux x86-64 o número fica em RAX, os seis argumentos em RDI, RSI, RDX, R10, R8, R9 e o resultado em RAX [2]. Isso não é acesso irrestrito nem elimina kernel/driver. A especificação WebAssembly separa seu core virtual das APIs que integram o módulo a cada ambiente; BRX-HAL deve seguir separação semelhante [6].
 
 Se por “diretamente” quisermos dizer escrever em registradores de GPU ou controlar memória física sem usar o driver/OS, BRX terá de rodar privilegiada — implementando um kernel/OS/driver ou em bare-metal — e suportar uma placa/ISA concreta. Nesse modelo a linguagem ganha controle, mas também assume boot, memória física e virtual, interrupções, processos, driver e segurança. Um driver já instalado não concede por si só acesso bruto: o runtime precisa usar a interface que o driver publica, e o host pode exigir permissões.
@@ -44,8 +46,8 @@ Comando de GPU de baixo nível varia por geração. Os manuais AMD RDNA/CDNA sã
 - **Build:** GNU `as` + `ld`.
 - **Execução testada:** Linux x86-64; binários sem `PT_INTERP` no build de teste.
 - **Fonte:** `brx0` lê `.brx`, interpreta inteiros/expressões e consulta CPU via CPUID.
-- **BRXE:** `brxvm0` lê um módulo binário de exemplo e executa o subconjunto documentado; o compilador `.brx`→`.brxe` e ports multicross-platform faltam.
-- **GPU/HAL:** ainda não implementadas.
+- **BRXE:** `brxvm0` lê um módulo binário de até 131071 bytes com pilha inteira e 256 slots locais; um verificador linear checa estrutura, literais, stack-depth e inicialização de locais antes de produzir saída. O compilador `.brx`→`.brxe`, autodetecção/HAL e ports multicross-platform faltam.
+- **GPU/adapters:** ainda não implementados.
 
 “Sem biblioteca” descreve os executores atuais, não independência total de ambiente: o Linux carrega os processos e fornece syscalls, e o assembler/linker geram o ELF inicial. O executável virtual BRXE não depende do formato nativo do host, mas depende de um runtime BRX instalado nele.
 
@@ -57,3 +59,5 @@ Comando de GPU de baixo nível varia por geração. Os manuais AMD RDNA/CDNA sã
 [4] Linux DRM driver UAPI: https://dri.freedesktop.org/docs/drm/gpu/driver-uapi.html
 [5] AMD GPU architecture programming documentation: https://gpuopen.com/amd-gpu-architecture-programming-documentation/
 [6] WebAssembly core specification: https://www.w3.org/TR/wasm-core-2/
+[7] Microsoft Basic Display Adapter: https://support.microsoft.com/en-us/windows/hardware/display-graphics/microsoft-basic-display-adapter-in-windows
+[8] Microsoft Basic Display Driver: https://learn.microsoft.com/en-us/windows-hardware/drivers/display/microsoft-basic-display-driver

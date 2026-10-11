@@ -80,6 +80,8 @@ Quando o runtime BRX está hospedado num OS, sua RAM de processo é geralmente *
 
 Com drivers instalados, o modelo desejado pelo usuário é viável no nível do aplicativo: criar uma **BRX-HAL** com pedidos como `cpu.info`, `gpu.create_surface`, `gpu.submit` e `audio.play`. Runtime BRX converte a operação para a interface de driver disponível no host. Se driver/adaptador, permissões e recurso necessários existem, o app não precisa saber a syscall/OS específica.
 
+Para adaptação automática, o runtime deve enumerar as interfaces e capabilities anunciadas pelo host e escolher, para cada função, o melhor backend instalado: específico/acelerado, genérico fornecido pelo OS, básico/software, ou erro explícito. O programa pode pedir capability obrigatória ou opcional e degradar se a opcional faltar. A Microsoft documenta o Basic Display Adapter genérico para funções gráficas básicas quando o driver do fabricante está ausente; drivers específicos ampliam desempenho/recursos [18] [19]. Isso é um fallback por classe/OS, não prova que exista um driver genérico para todo hardware. O runtime não deve instalar drivers nem elevar permissões.
+
 O driver já instalado não implica acesso bruto ao hardware. Drivers executam parte privilegiada e controlam buffers, memória, sincronização e comandos. Linux DRM documenta esse papel e APIs UAPI por driver [11] [12]. GPU tem ISA e formatos de comando por fabricante e geração; manuais AMD RDNA/CDNA são específicos de família [13].
 
 > “Conversa direta com o hardware” pode significar que o aplicativo BRX usa sua própria API abstrata, cujo runtime fala com drivers instalados. Se significar acesso físico sem OS/driver, BRX precisa assumir kernel/firmware/driver e privilégios — praticamente criar um sistema operacional. São dois objetivos diferentes.
@@ -96,19 +98,19 @@ Builds reproduzíveis e comparação de estágios ajudam a auditar a toolchain. 
 
 1. Fechar o subconjunto textual BRX atual e ampliar testes.
 2. Formalizar BRXE v1: cabeçalho, endian, limites, opcodes, stack/traps e compatibilidade.
-3. Ampliar o interpretador BRXE com locais, saltos e funções, mantendo programa de teste binário.
+3. Ampliar o interpretador BRXE com saltos e funções; 256 slots locais já foram implementados no subset atual.
 4. Construir AST/IR no front-end e compilador manual BRX→BRXE, sem bibliotecas externas.
 5. Comparar execução do fonte e do bytecode para todos os exemplos.
 6. Portar `brxvm0` para outro OS/ISA e demonstrar o **mesmo `.brxe`**, sem recompilação.
 7. Definir/importar serviços host `BRX.IO`/`BRX.HAL` de forma versionada e baseada em permissões.
-8. Criar adapter gráfico depois de identificar uma GPU/driver real para teste; começar com buffer/surface simples e fail-safe.
+8. Criar a sondagem de capabilities e o fallback genérico/software antes do adapter gráfico; depois testar uma superfície/buffer em hosts e GPUs reais, sempre com erro seguro para capability ausente.
 9. Escrever o compilador em BRX quando a linguagem já manipular arquivo/buffers, funções, loops e emitir bytecode; executar bootstrap BRX0→BRX1→BRX2.
 
 ## 8. Estado real do repositório
 
-Neste marco, `src/boot/brx0.s` é um interpretador de texto BRX em assembly x86-64. `src/vm/brxvm0.s` já implementa um **runtime inicial de BRXE** no Linux x86-64, com loader/validação de cabeçalho, pilha limitada, inteiros, soma/subtração/multiplicação/divisão/resto e saída de inteiro/literal. `examples/hello.brxe` exercita o formato e o executor. A suíte `tests/smoke.sh` compila e testa ambos.
+Neste marco, `src/boot/brx0.s` é um interpretador de texto BRX em assembly x86-64. `src/vm/brxvm0.s` implementa um **runtime inicial de BRXE** no Linux x86-64, com loader/validação de cabeçalho, arquivo até 131071 bytes, pilha limitada, inteiros, 256 slots locais, soma/subtração/multiplicação/divisão/resto e saída de inteiro/literal. Antes de executar, verifica o fluxo linear de opcodes/operandos, profundidade da pilha e leitura de slots inicializados; um opcode inválido tardio ou arquivo superdimensionado é rejeitado. `examples/hello.brxe` exercita gravação/leitura de local e execução do formato. A suíte testa ambos os executores e módulos inválidos.
 
-Ainda faltam compilador fonte→BRXE, variáveis/saltos/funções no bytecode, hosts adicionais e HAL/GPU. O executável nativo do runtime atual depende de Linux x86-64 e `as`/`ld` no build, mas os aplicativos futuros serão `.brxe`. Esta distinção é importante: BRXE é a camada virtual portátil pretendida; o runtime nativo que interpreta BRXE ainda é específico do host.
+Ainda faltam compilador fonte→BRXE, saltos/funções no bytecode, sondagem/HAL/GPU e runtimes para outros hosts. O executável nativo do runtime atual depende de Linux x86-64 e `as`/`ld` no build, mas os aplicativos futuros serão `.brxe`. Esta distinção é importante: BRXE é a camada virtual portátil pretendida; o runtime nativo que interpreta BRXE ainda é específico do host.
 
 ## Referências principais
 
@@ -129,3 +131,5 @@ Ainda faltam compilador fonte→BRXE, variáveis/saltos/funções no bytecode, h
 15. Installing Go from source — https://go.dev/doc/install/source
 16. GCC build/stages — https://gcc.gnu.org/install/build.html
 17. Ken Thompson, “Reflections on Trusting Trust” — https://dl.acm.org/doi/10.1145/358198.358210
+18. Microsoft Basic Display Adapter — https://support.microsoft.com/en-us/windows/hardware/display-graphics/microsoft-basic-display-adapter-in-windows
+19. Microsoft Basic Display Driver — https://learn.microsoft.com/en-us/windows-hardware/drivers/display/microsoft-basic-display-driver

@@ -18,7 +18,7 @@ Atenda “sem bibliotecas” implementando manualmente lexer, parser, runtime e 
 3. **Implementar o front-end à mão.** Fazer scanner com posições, parser recursive descent/precedence-climbing, AST/IR, resolução de nomes, verificador semântico/tipos e executor, tudo sem geradores ou bibliotecas se o pedido exigir.
 4. **Escolher o executável.** Para aplicações portáveis, especifique uma VM/ISA virtual e um bytecode/binário versionado (header, sections, opcodes, endianness, validação, stack/memory, traps). Separar o core bytecode das APIs específicas ao host. Não anunciar “um binário para qualquer máquina” sem runtimes conformes.
 5. **Construir o runtime inicial.** Escreva manualmente o primeiro VM/runtime em baixo nível e documente linguagem/ISA, as/linker, OS, ABI, formato nativo e serviços usados. O runtime de cada host deve aceitar o mesmo arquivo virtual e passar os mesmos testes.
-6. **Projetar a HAL.** Aplicativos importam capacidades estáveis (console, arquivos, memória, CPU info, GPU); adaptadores BRX convertem-nas para OS/driver existente. O app pode ignorar o OS se runtime+driver compatível estiverem disponíveis e autorizados.
+6. **Projetar a HAL.** Aplicativos importam capacidades estáveis (console, arquivos, memória, CPU info, GPU); adaptadores BRX convertem-nas para OS/driver existente. O runtime deve sondar interfaces/capabilities do host e selecionar automaticamente backend específico, genérico ou software quando disponível. O app pode ignorar o OS se runtime+driver compatível estiverem disponíveis e autorizados; nenhuma capability ausente deve virar sucesso silencioso.
 7. **Não confundir HAL com acesso físico.** Driver instalado não concede acesso irrestrito: hosted runtime usa a interface/permissões do driver. Acesso bruto privilegiado exige runtime de kernel/bare-metal e suporte concreto a CPU/placa; isso é criar também uma parte do OS/driver.
 8. **Testar por estágio.** Testar token/AST/semântica, bytecode bom e malformado, bounds, underflow, divisão por zero, opcodes inválidos, compatibilidade entre hosts e permissões de hardware. Manter regressões.
 9. **Evoluir para auto-hospedagem.** Quando BRX puder ler arquivos, manipular buffers, controlar fluxo e emitir bytecode, escreva compilador em BRX e compile com versão anterior; comparar artefatos/testes. Self-hosting não remove a história do bootstrap.
@@ -30,7 +30,7 @@ Atenda “sem bibliotecas” implementando manualmente lexer, parser, runtime e 
 - Núcleo sem C/libc/terceiras bibliotecas. Assembler/linker de bootstrap e syscalls Linux são dependências do build/host atuais, não dependências de app BRXE depois que um VM estiver instalado.
 - Definir formato BRXE versão/opcodes/traps com testes antes de afirmar compatibilidade.
 - Criar `BRX-HAL` versionada e baseada em capacidades; especificar como cada adaptador lida com recursos ausentes.
-- Antes de GPU, identificar família/geração/driver para o primeiro teste real; desenhar API de alto nível e backend por host, validar comandos e nunca fazer write a registradores desconhecidos.
+- Para GPU, desenhar primeiro API de alto nível capability-driven e uma cadeia de fallback. Drivers genéricos podem oferecer somente funções básicas e existem apenas quando o host os fornece; não há promessa de um driver universal. Testar cada adapter/OS/driver antes de anunciá-lo e nunca escrever a registradores desconhecidos.
 - Registrar as diferenças entre aplicativo, arquivo virtual, runtime, adaptador, driver, kernel/OS e hardware.
 
 ## Referências
