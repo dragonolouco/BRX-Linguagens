@@ -1,0 +1,11 @@
+// Primeiro programa em BRX
+let nome = "mundo";
+let resposta = 6 * 7;
+print("Ola, " + nome + "!");
+print(resposta);
+
+if (resposta == 42) {
+  print(true);
+} else {
+  print(false);
+}
